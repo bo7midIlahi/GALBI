@@ -5,8 +5,19 @@ U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0,18, 19, 17,U8X8_PIN_NONE);
 #include <Wire.h>
 #include "MAX30105.h"
 #include "heartRate.h"
-
 MAX30105 particleSensor;
+
+//waveform buffer
+#define WAVE_X 0
+#define WAVE_Y 63          // bottom of screen
+#define WAVE_W 128         // full width
+#define WAVE_H 50          // almost full height
+
+int16_t waveBuf[WAVE_W];
+uint8_t waveIdx = 0;
+
+long irDC = 0;          // baseline
+
 
 const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
 byte rates[RATE_SIZE]; //Array of heart rates
@@ -932,7 +943,7 @@ void drawFrame(U8G2 &u8g2, uint8_t frame) {
 }
 
 void welcome_animation(U8G2 &u8g2) {
-  for(uint8_t iter = 0; iter<3; iter++){
+  for(uint8_t iter = 0; iter<2; iter++){
     for (uint8_t f = 0; f < 15; f++) {
       drawFrame(u8g2, f);
       u8g2.sendBuffer();
@@ -955,13 +966,35 @@ void setup() {
     while (1);
   }
 
-  particleSensor.setup();
+  //Setup to sense a nice looking saw tooth on the plotter
+  byte ledBrightness = 0x1F; //Options: 0=Off to 255=50mA
+  byte sampleAverage = 8; //Options: 1, 2, 4, 8, 16, 32
+  byte ledMode = 3; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
+  int sampleRate = 100; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+  int pulseWidth = 411; //Options: 69, 118, 215, 411
+  int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
+
+  particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange); //Configure sensor with these settings
+
   particleSensor.setPulseAmplitudeRed(0x0A);
   particleSensor.setPulseAmplitudeGreen(0);
 
   pinMode(BTN_PIN, INPUT_PULLUP);
 
   welcome_animation(u8g2);
+
+    //Take an average of IR readings at power up
+  const byte avgAmount = 64;
+  long baseValue = 0;
+  for (byte x = 0 ; x < avgAmount ; x++)
+  {
+    baseValue += particleSensor.getIR(); //Read the IR value
+  }
+  baseValue /= avgAmount;
+
+  //Pre-populate the plotter so that the Y scale is close to IR values
+  for (int x = 0 ; x < 500 ; x++)
+    Serial.println(baseValue);
 
 }
 
@@ -994,8 +1027,36 @@ void drawVitals(int8_t page, long beatsPerMinute, long beatAvg){
   u8g2.drawStr(73,5, "[MAX]");
 }
 
-void drawHR(){
-  u8g2.drawStr(30, 40, "HEART");
+void drawHRWaveform() {
+  for (int i = 1; i < WAVE_W; i++) {
+    int i1 = (waveIdx + i - 1) % WAVE_W;
+    int i2 = (waveIdx + i) % WAVE_W;
+
+    int y1 = map(waveBuf[i1], -2500, 2500,
+                 WAVE_Y - WAVE_H, WAVE_Y);
+    int y2 = map(waveBuf[i2], -2500, 2500,
+                 WAVE_Y - WAVE_H, WAVE_Y);
+
+    u8g2.drawLine(i - 1, y1, i, y2);
+  }
+
+  // optional center line (helps visually)
+  int midY = WAVE_Y - WAVE_H / 2;
+  u8g2.drawHLine(0, midY, 128);
+}
+
+void drawWaveHeader() {
+  u8g2.setFont(u8g2_font_04b_03_tr);
+
+  char buf[6];
+  sprintf(buf, "%d", beatAvg);
+  u8g2.drawStr(2, 8, buf);
+  u8g2.drawStr(20, 8, "BPM [MAX 30102]");
+  u8g2.drawStr(0, 20, "PLACE YOUR FINGER ON SENSOR");
+
+  // optional signal indicator
+  if (abs(beatsPerMinute - beatAvg) > 15)
+    u8g2.drawStr(80, 8, "UNSTABLE");
 }
 
 void drawTable() {
@@ -1043,10 +1104,14 @@ void getVitals(){
     }
 }
 
-void drawUI(int8_t page){
-  if(page==0) { // first page: VITALS READINGS
-    drawHR();
+void drawUI(int8_t page, long irValue){
+  if (page == 0) {
+    updateWaveform(irValue);
+    drawWaveHeader();
+    drawHRWaveform();
   }
+
+
 
   if(page==1) {// second page: HR WAVEFORM
     drawVitals(page,beatsPerMinute,beatAvg);
@@ -1056,6 +1121,17 @@ void drawUI(int8_t page){
     drawTable();
   }
 }
+
+void updateWaveform(long irValue) {
+  irDC = irDC * 0.97 + irValue * 0.03;
+
+  int16_t ac = irValue - irDC;
+  ac = constrain(ac, -2500, 2500);
+
+  waveBuf[waveIdx] = ac;
+  waveIdx = (waveIdx + 1) % WAVE_W;
+}
+
 
 int8_t page = 0;
 void loop() {
@@ -1071,6 +1147,7 @@ void loop() {
   Serial.println(page);
 
   long irValue = particleSensor.getIR();
+  
   if (checkForBeat(irValue) == true)
   {
     getVitals();
@@ -1085,7 +1162,9 @@ void loop() {
   }
   Serial.println();
 
-  drawUI(page);
+  updateWaveform(irValue);
+
+  drawUI(page,irValue);
 
   u8g2.sendBuffer();
 }
