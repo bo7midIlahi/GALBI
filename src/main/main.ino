@@ -8,7 +8,7 @@ U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0,18, 19, 17,U8X8_PIN_NONE);
 
 MAX30105 particleSensor;
 
-const byte RATE_SIZE = 8; //Increase this for more averaging. 4 is good.
+const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
 byte rates[RATE_SIZE]; //Array of heart rates
 byte rateSpot = 0;
 long lastBeat = 0; //Time at which the last beat occurred
@@ -97,23 +97,8 @@ void drawTable() {
   u8g2.drawHLine(1,  40, 126);
 }
 
-int8_t page = 0;
-void loop() {
-  u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_04b_03_tr);
-
-
-  if(btn_pressed()) {
-    page += 1;
-    page %=3;
-  }
-  Serial.print("PAGE: ");
-  Serial.println(page);
-
-  long irValue = particleSensor.getIR();
-  if (checkForBeat(irValue) == true)
-  {
-    //We sensed a beat!
+void getVitals(){
+  //We sensed a beat!
     long delta = millis() - lastBeat;
     lastBeat = millis();
 
@@ -130,7 +115,38 @@ void loop() {
         beatAvg += rates[x];
       beatAvg /= RATE_SIZE;
     }
+}
+
+int8_t page = 0;
+void loop() {
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_04b_03_tr);
+
+
+  if(btn_pressed()) {
+    page += 1;
+    page %=3;
   }
+  Serial.print("PAGE: ");
+  Serial.println(page);
+
+  long irValue = particleSensor.getIR();
+  if (checkForBeat(irValue) == true)
+  {
+    getVitals();
+  }
+
+  Serial.print("IR=");
+  Serial.print(irValue);
+  Serial.print(", BPM=");
+  Serial.print(beatsPerMinute);
+  Serial.print(", Avg BPM=");
+  Serial.print(beatAvg);
+
+  if (irValue < 50000)
+    Serial.print(" No finger?");
+
+  Serial.println();
 
   if(page==0) { // first page: VITALS READINGS
     drawHR();
