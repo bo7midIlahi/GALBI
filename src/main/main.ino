@@ -8,7 +8,7 @@ U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0,18, 19, 17,U8X8_PIN_NONE);
 MAX30105 particleSensor;
 
 #define ECG_PIN 28
-
+#define IR_THRESHOLD 1000
 //waveform buffer
 #define WAVE_X 0
 #define WAVE_Y 63          // bottom of screen
@@ -1022,23 +1022,7 @@ bool btn_pressed() {
   lastBtnState = currentBtnState;
   return false;
 }
-/*
-void drawVitals(int8_t page, long beatsPerMinute, long beatAvg){
-  Serial.print("HR: ");
-  Serial.println(beatsPerMinute);
 
-  char buff[50];
-  sprintf(buff,"%d",page);
-  
-  u8g2.drawStr(0,5, "HR:");
-  u8g2.drawStr(15,5, buff);
-  u8g2.drawStr(30,5, "[ECG]");
-
-  dtostrf(beatAvg, 4, 1, buff);
-  u8g2.drawStr(55,5, buff);
-  u8g2.drawStr(73,5, "[MAX]");
-}
-*/
 void drawWaveform(const Waveform &w) {
   for (int i = 1; i < WAVE_W; i++) {
     int i1 = (w.idx + i - 1) % WAVE_W;
@@ -1056,7 +1040,6 @@ void drawWaveform(const Waveform &w) {
   int midY = WAVE_Y - WAVE_H / 2;
   u8g2.drawHLine(0, midY, 128);
 }
-
 
 void drawWaveHeader(int8_t page) {
   u8g2.setFont(u8g2_font_04b_03_tr);
@@ -1080,12 +1063,12 @@ void drawWaveHeader(int8_t page) {
     u8g2.drawStr(100, 8, "UNSTABLE");
 }
 
-void drawTable() {
+void drawTable(long irValue) {
   u8g2.drawFrame(0, 0, 128 , 64);
   //columns headers
   u8g2.drawStr(23, 7, "TACH");
   u8g2.drawStr(46, 7, "BRAD");
-  u8g2.drawStr(72, 7, "ARRYTH");
+  u8g2.drawStr(82, 7, "HR");
   u8g2.drawStr(106, 7, "SpO2");
 
   //lines headers
@@ -1103,6 +1086,16 @@ void drawTable() {
   u8g2.drawHLine(1,  10, 126);
   u8g2.drawHLine(1,  25, 126);
   u8g2.drawHLine(1,  40, 126);
+
+	char buff[6];
+	dtostrf(beatAvg,3,2,buff);
+	u8g2.drawStr(79, 35, buff);
+	u8g2.drawBox(104, 11, 23, 14); //ECG do not determin SpO2;
+
+	bool tachy = beatAvg > 100;
+	bool brady = beatAvg < 50;
+	bool unstable = abs(beatsPerMinute - beatAvg) > 15;
+	bool noSignal = irValue < IR_THRESHOLD;
 }
 
 void getVitals(){
@@ -1140,7 +1133,7 @@ void drawUI(int8_t page, long irValue){
   }
 
   if(page==2) {// Summary
-    drawTable();
+    drawTable(irValue);
   }
 }
 
@@ -1182,6 +1175,9 @@ void loop() {
     Serial.print(" No finger?");
   }
   Serial.println();
+
+
+  Serial.print("EKG:");Serial.println(analogRead(ECG_PIN));
 
   //updateWaveform(irValue);
 
