@@ -73,7 +73,28 @@ void drawHR(){
 }
 
 void drawTable() {
-  u8g2.drawStr(30, 40, "TABLE");
+  u8g2.drawFrame(0, 0, 128 , 64);
+  //columns headers
+  u8g2.drawStr(23, 7, "TACH");
+  u8g2.drawStr(46, 7, "BRAD");
+  u8g2.drawStr(72, 7, "ARRYTH");
+  u8g2.drawStr(106, 7, "SpO2");
+
+  //lines headers
+  u8g2.drawStr(4, 20, "ECG");
+  u8g2.drawStr(3, 35, "MAX");
+  u8g2.drawStr(4, 55, "ACT");
+
+  //columns seperators
+  u8g2.drawVLine(20, 1, 62);
+  u8g2.drawVLine(42, 1, 62);
+  u8g2.drawVLine(68, 1, 62);
+  u8g2.drawVLine(103, 1, 62);
+
+  //lines seperators
+  u8g2.drawHLine(1,  10, 126);
+  u8g2.drawHLine(1,  25, 126);
+  u8g2.drawHLine(1,  40, 126);
 }
 
 int8_t page = 0;
@@ -112,11 +133,11 @@ void loop() {
   }
 
   if(page==0) { // first page: VITALS READINGS
-    drawVitals(page,beatsPerMinute,beatAvg);
+    drawHR();
   }
 
   if(page==1) {// second page: HR WAVEFORM
-    drawHR();
+    drawVitals(page,beatsPerMinute,beatAvg);
   }
 
   if(page==2) {// second page: HR WAVEFORM
