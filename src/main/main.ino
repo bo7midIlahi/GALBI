@@ -7,16 +7,24 @@ U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0,18, 19, 17,U8X8_PIN_NONE);
 #include "heartRate.h"
 MAX30105 particleSensor;
 
+#define ECG_PIN 28
+
 //waveform buffer
 #define WAVE_X 0
 #define WAVE_Y 63          // bottom of screen
 #define WAVE_W 128         // full width
 #define WAVE_H 50          // almost full height
+//waveform struct
+struct Waveform {
+  int16_t buf[WAVE_W];
+  uint8_t idx;
+  long dc;
+  int16_t minVal;
+  int16_t maxVal;
+};
 
-int16_t waveBuf[WAVE_W];
-uint8_t waveIdx = 0;
-
-long irDC = 0;          // baseline
+Waveform ppgWave;   // MAX30102
+Waveform ecgWave;   // AD8232
 
 
 const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
@@ -996,6 +1004,10 @@ void setup() {
   for (int x = 0 ; x < 500 ; x++)
     Serial.println(baseValue);
 
+  //initialize waveform parameters
+  ppgWave = { {}, 0, 0, -2500, 2500 };   // MAX30102
+  ecgWave = { {}, 0, 0, -1200, 1200 };   // AD8232 (example range)
+
 }
 
 bool lastBtnState = LOW;
@@ -1010,7 +1022,7 @@ bool btn_pressed() {
   lastBtnState = currentBtnState;
   return false;
 }
-
+/*
 void drawVitals(int8_t page, long beatsPerMinute, long beatAvg){
   Serial.print("HR: ");
   Serial.println(beatsPerMinute);
@@ -1026,37 +1038,46 @@ void drawVitals(int8_t page, long beatsPerMinute, long beatAvg){
   u8g2.drawStr(55,5, buff);
   u8g2.drawStr(73,5, "[MAX]");
 }
-
-void drawHRWaveform() {
+*/
+void drawWaveform(const Waveform &w) {
   for (int i = 1; i < WAVE_W; i++) {
-    int i1 = (waveIdx + i - 1) % WAVE_W;
-    int i2 = (waveIdx + i) % WAVE_W;
+    int i1 = (w.idx + i - 1) % WAVE_W;
+    int i2 = (w.idx + i) % WAVE_W;
 
-    int y1 = map(waveBuf[i1], -2500, 2500,
+    int y1 = map(w.buf[i1], w.minVal, w.maxVal,
                  WAVE_Y - WAVE_H, WAVE_Y);
-    int y2 = map(waveBuf[i2], -2500, 2500,
+    int y2 = map(w.buf[i2], w.minVal, w.maxVal,
                  WAVE_Y - WAVE_H, WAVE_Y);
 
     u8g2.drawLine(i - 1, y1, i, y2);
   }
 
-  // optional center line (helps visually)
+  //center line (helps visually)
   int midY = WAVE_Y - WAVE_H / 2;
   u8g2.drawHLine(0, midY, 128);
 }
 
-void drawWaveHeader() {
+
+void drawWaveHeader(int8_t page) {
   u8g2.setFont(u8g2_font_04b_03_tr);
 
   char buf[6];
-  sprintf(buf, "%d", beatAvg);
-  u8g2.drawStr(2, 8, buf);
-  u8g2.drawStr(20, 8, "BPM [MAX 30102]");
-  u8g2.drawStr(0, 20, "PLACE YOUR FINGER ON SENSOR");
+  if(page == 0) {
+    sprintf(buf, "%d", beatAvg);
+    u8g2.drawStr(2, 6, buf);
+    u8g2.drawStr(17, 6, "BPM [MAX 30102]");
+    u8g2.drawStr(0, 62, "PLACE YOUR FINGER ON SENSOR");
+  }
+  if(page == 1){
+    sprintf(buf, "%d", beatAvg);
+    u8g2.drawStr(2, 6, buf);
+    u8g2.drawStr(17, 6, "BPM [AD 8323]");
+    u8g2.drawStr(0, 60, "PLACE ELECTRODES ON BODY");
+  }
 
   // optional signal indicator
   if (abs(beatsPerMinute - beatAvg) > 15)
-    u8g2.drawStr(80, 8, "UNSTABLE");
+    u8g2.drawStr(100, 8, "UNSTABLE");
 }
 
 void drawTable() {
@@ -1105,33 +1126,33 @@ void getVitals(){
 }
 
 void drawUI(int8_t page, long irValue){
-  if (page == 0) {
-    updateWaveform(irValue);
-    drawWaveHeader();
-    drawHRWaveform();
+  if (page == 0) { // draw HR waveforms from MAX 30102
+    updateWaveform(ppgWave, irValue, 0.03);
+    drawWaveHeader(page);
+    drawWaveform(ppgWave);
   }
 
-
-
-  if(page==1) {// second page: HR WAVEFORM
-    drawVitals(page,beatsPerMinute,beatAvg);
+  if(page==1) {// draw HR waveforms from AD8232
+    long ecgValue = analogRead(ECG_PIN);
+    updateWaveform(ecgWave, ecgValue, 0.01); // slower DC tracking
+    drawWaveHeader(page);
+    drawWaveform(ecgWave);
   }
 
-  if(page==2) {// second page: HR WAVEFORM
+  if(page==2) {// Summary
     drawTable();
   }
 }
 
-void updateWaveform(long irValue) {
-  irDC = irDC * 0.97 + irValue * 0.03;
+void updateWaveform(Waveform &w, long value, float dcAlpha) {
+  w.dc = w.dc * (1.0 - dcAlpha) + value * dcAlpha;
 
-  int16_t ac = irValue - irDC;
-  ac = constrain(ac, -2500, 2500);
+  int16_t ac = value - w.dc;
+  ac = constrain(ac, w.minVal, w.maxVal);
 
-  waveBuf[waveIdx] = ac;
-  waveIdx = (waveIdx + 1) % WAVE_W;
+  w.buf[w.idx] = ac;
+  w.idx = (w.idx + 1) % WAVE_W;
 }
-
 
 int8_t page = 0;
 void loop() {
@@ -1162,7 +1183,7 @@ void loop() {
   }
   Serial.println();
 
-  updateWaveform(irValue);
+  //updateWaveform(irValue);
 
   drawUI(page,irValue);
 
