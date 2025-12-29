@@ -141,46 +141,7 @@ void drawWaveform(const Waveform &w) {
   int midY = WAVE_Y - WAVE_H / 2;
   u8g2.drawHLine(0, midY, 128);
 }
-
-void drawWaveHeader(int8_t page) {
-  u8g2.setFont(u8g2_font_04b_03_tr);
-
-  char buf[6];
-  if(page == 0) {
-    sprintf(buf, "%d", beatAvg);
-    u8g2.drawStr(2, 6, buf);
-    u8g2.drawStr(17, 6, "BPM [MAX 30102]");
-    u8g2.drawStr(0, 62, "PLACE YOUR FINGER ON SENSOR");
-  }
-  if(page == 1){
-    sprintf(buf, "%d", beatAvg);
-    u8g2.drawStr(2, 6, buf);
-    u8g2.drawStr(17, 6, "BPM [AD 8323]");
-    u8g2.drawStr(0, 60, "PLACE ELECTRODES ON BODY");
-  }
-
-  // optional signal indicator
-  if (abs(beatsPerMinute - beatAvg) > 15)
-    u8g2.drawStr(90, 6, "UNSTABLE");
-}
-
-//calculate RR-interval from AD
-bool detectRPeak(int ecgValue) {
-  static int prev = 0;
-  static bool above = false;
-
-  if (ecgValue > ECG_THRESHOLD && !above && prev < ecgValue) {
-    above = true;
-    return true;
-  }
-  if (ecgValue < ECG_THRESHOLD) {
-    above = false;
-  }
-
-  prev = ecgValue;
-  return false;
-}
-
+//calculates RR-INTERVAL from AD
 unsigned long lastECGBeat = 0;
 unsigned long rrECG = 0;
 
@@ -189,7 +150,6 @@ void onECGBeatDetected() {
   rrECG = now - lastECGBeat;
   lastECGBeat = now;
 }
-
 
 //calculates RR-INTERVAL from MAX
 unsigned long lastPPGBeat = 0;
@@ -201,6 +161,8 @@ void onPPGBeatDetected() {
   lastPPGBeat = now;
 }
 
+float bpmECG;
+float bpmPPG;
 void drawTable(long irValue) {
   u8g2.drawFrame(0, 0, 128 , 64);
   // columns headers
@@ -228,8 +190,8 @@ void drawTable(long irValue) {
 
 	char buff[6];
   //values
-  float bpmECG = 60000.0 / rrECG;
-  float bpmPPG = 60000.0 / rrPPG;
+  bpmECG = 60000.0 / rrECG;
+  bpmPPG = 60000.0 / rrPPG;
   int dHR = abs((int)bpmECG - (int)bpmPPG);
 
 
@@ -278,6 +240,45 @@ void drawTable(long irValue) {
     u8g2.drawFrame(67, 47, 54, 11);
     u8g2.drawStr(69, 55, "TACHYCARDIA");
   }
+}
+
+void drawWaveHeader(int8_t page) {
+  u8g2.setFont(u8g2_font_04b_03_tr);
+
+  char buf[6];
+  if(page == 0) {
+    sprintf(buf, "%d", bpmPPG);
+    u8g2.drawStr(2, 6, buf);
+    u8g2.drawStr(17, 6, "BPM [MAX 30102]");
+    u8g2.drawStr(0, 62, "PLACE YOUR FINGER ON SENSOR");
+  }
+  if(page == 1){
+    sprintf(buf, "%d", bpmECG);
+    u8g2.drawStr(2, 6, buf);
+    u8g2.drawStr(17, 6, "BPM [AD 8323]");
+    u8g2.drawStr(0, 60, "PLACE ELECTRODES ON BODY");
+  }
+
+  // optional signal indicator
+  if (abs(beatsPerMinute - beatAvg) > 15)
+    u8g2.drawStr(90, 6, "UNSTABLE");
+}
+
+//calculate RR-interval from AD
+bool detectRPeak(int ecgValue) {
+  static int prev = 0;
+  static bool above = false;
+
+  if (ecgValue > ECG_THRESHOLD && !above && prev < ecgValue) {
+    above = true;
+    return true;
+  }
+  if (ecgValue < ECG_THRESHOLD) {
+    above = false;
+  }
+
+  prev = ecgValue;
+  return false;
 }
 
 void getVitals(){
