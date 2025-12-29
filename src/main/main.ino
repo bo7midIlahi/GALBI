@@ -256,7 +256,7 @@ void drawWaveHeader(int8_t page) {
     sprintf(buf, "%d", bpmECG);
     u8g2.drawStr(2, 6, buf);
     u8g2.drawStr(17, 6, "BPM [AD 8323]");
-    u8g2.drawStr(0, 60, "PLACE ELECTRODES ON BODY");
+    u8g2.drawStr(0, 62, "PLACE ELECTRODES ON BODY");
   }
 
   // optional signal indicator
