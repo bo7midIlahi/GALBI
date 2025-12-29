@@ -10,6 +10,7 @@ MAX30105 particleSensor;
 
 #define ECG_PIN 28
 #define IR_THRESHOLD 1000
+#define ECG_THRESHOLD 550
 //waveform buffer
 #define WAVE_X 0
 #define WAVE_Y 63          // bottom of screen
@@ -160,13 +161,50 @@ void drawWaveHeader(int8_t page) {
 
   // optional signal indicator
   if (abs(beatsPerMinute - beatAvg) > 15)
-    u8g2.drawStr(85, 8, "UNSTABLE");
+    u8g2.drawStr(90, 6, "UNSTABLE");
+}
+
+//calculate RR-interval from AD
+bool detectRPeak(int ecgValue) {
+  static int prev = 0;
+  static bool above = false;
+
+  if (ecgValue > ECG_THRESHOLD && !above && prev < ecgValue) {
+    above = true;
+    return true;
+  }
+  if (ecgValue < ECG_THRESHOLD) {
+    above = false;
+  }
+
+  prev = ecgValue;
+  return false;
+}
+
+unsigned long lastECGBeat = 0;
+unsigned long rrECG = 0;
+
+void onECGBeatDetected() {
+  unsigned long now = millis();
+  rrECG = now - lastECGBeat;
+  lastECGBeat = now;
+}
+
+
+//calculates RR-INTERVAL from MAX
+unsigned long lastPPGBeat = 0;
+unsigned long rrPPG = 0;
+
+void onPPGBeatDetected() {
+  unsigned long now = millis();
+  rrPPG = now - lastPPGBeat;
+  lastPPGBeat = now;
 }
 
 void drawTable(long irValue) {
   u8g2.drawFrame(0, 0, 128 , 64);
   //columns headers
-  u8g2.drawStr(23, 7, "TACH");
+  u8g2.drawStr(25, 7, "R-R");
   u8g2.drawStr(46, 7, "BRAD");
   u8g2.drawStr(82, 7, "HR");
   u8g2.drawStr(106, 7, "SpO2");
@@ -188,8 +226,24 @@ void drawTable(long irValue) {
   u8g2.drawHLine(1,  40, 126);
 
 	char buff[6];
-	dtostrf(beatAvg,3,2,buff);
+  //draw avg beat from MAX
+  float bpmPPG = 60000.0 / rrPPG;
+	dtostrf(bpmPPG,2,2,buff);
 	u8g2.drawStr(79, 35, buff);
+
+  //draw R-R interval from MAX
+  dtostrf(rrPPG,2,1,buff);
+	u8g2.drawStr(23, 35, buff);
+
+  //draw avg beat from ECG
+  float bpmECG = 60000.0 / rrECG;
+	dtostrf(bpmECG,2,2,buff);
+	u8g2.drawStr(79, 20, buff);
+
+  //draw R-R interval from ECG
+  dtostrf(rrECG,2,1,buff);
+	u8g2.drawStr(23, 20, buff);
+
 	u8g2.drawBox(104, 11, 23, 14); //ECG do not determin SpO2;
 
 	bool tachy = beatAvg > 100;
@@ -200,22 +254,22 @@ void drawTable(long irValue) {
 
 void getVitals(){
   //We sensed a beat!
-    long delta = millis() - lastBeat;
-    lastBeat = millis();
+  long delta = millis() - lastBeat;
+  lastBeat = millis();
 
-    beatsPerMinute = 60 / (delta / 1000.0);
+  beatsPerMinute = 60 / (delta / 1000.0);
 
-    if (beatsPerMinute < 255 && beatsPerMinute > 20)
-    {
-      rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
-      rateSpot %= RATE_SIZE; //Wrap variable
+  if (beatsPerMinute < 255 && beatsPerMinute > 20)
+  {
+    rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+    rateSpot %= RATE_SIZE; //Wrap variable
 
-      //Take average of readings
-      beatAvg = 0;
-      for (byte x = 0 ; x < RATE_SIZE ; x++)
-        beatAvg += rates[x];
-      beatAvg /= RATE_SIZE;
-    }
+    //Take average of readings
+    beatAvg = 0;
+    for (byte x = 0 ; x < RATE_SIZE ; x++)
+      beatAvg += rates[x];
+    beatAvg /= RATE_SIZE;
+  }
 }
 
 void drawUI(int8_t page, long irValue){
@@ -264,6 +318,7 @@ void loop() {
   
   if (checkForBeat(irValue) == true)
   {
+    onPPGBeatDetected();
     getVitals();
   }
 
@@ -275,7 +330,6 @@ void loop() {
     Serial.print(" No finger?");
   }
   Serial.println();
-
 
   Serial.print("EKG:");Serial.println(analogRead(ECG_PIN));
 
