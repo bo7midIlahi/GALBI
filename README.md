@@ -52,7 +52,7 @@ Galbi is a *DIY Home Monitor* capable of visualizing **heart rate waveform** and
 ## 🚀 It's TEST TIME
 - 1st PAGE: place your finger on the sensor and wait for few seconds
   <img
-    src="img/max_page.jpg"
+    src="img/hr_plot.jpg"
     alt="page1"
     width=100%
   />
