@@ -203,53 +203,81 @@ void onPPGBeatDetected() {
 
 void drawTable(long irValue) {
   u8g2.drawFrame(0, 0, 128 , 64);
-  //columns headers
+  // columns headers
   u8g2.drawStr(25, 7, "R-R");
-  u8g2.drawStr(46, 7, "BRAD");
-  u8g2.drawStr(82, 7, "HR");
-  u8g2.drawStr(106, 7, "SpO2");
+  u8g2.drawStr(46, 7, "HR_E");
+  u8g2.drawStr(74, 7, "HR_P");
+  u8g2.drawStr(104, 7, "dHR");
 
   //lines headers
   u8g2.drawStr(4, 20, "ECG");
   u8g2.drawStr(3, 35, "MAX");
-  u8g2.drawStr(4, 55, "ACT");
+  u8g2.drawStr(4, 55, "ACT:");
 
   //columns seperators
-  u8g2.drawVLine(20, 1, 62);
-  u8g2.drawVLine(42, 1, 62);
-  u8g2.drawVLine(68, 1, 62);
-  u8g2.drawVLine(103, 1, 62);
+  u8g2.drawVLine(20, 1, 40);
+  u8g2.drawVLine(44, 1, 40);
+  u8g2.drawVLine(72, 1, 40);
+  u8g2.drawVLine(100, 1, 40);
+
 
   //lines seperators
   u8g2.drawHLine(1,  10, 126);
-  u8g2.drawHLine(1,  25, 126);
+  u8g2.drawHLine(1,  25, 100);
   u8g2.drawHLine(1,  40, 126);
 
 	char buff[6];
-  //draw avg beat from MAX
-  float bpmPPG = 60000.0 / rrPPG;
-	dtostrf(bpmPPG,2,2,buff);
-	u8g2.drawStr(79, 35, buff);
-
-  //draw R-R interval from MAX
-  dtostrf(rrPPG,2,1,buff);
-	u8g2.drawStr(23, 35, buff);
-
-  //draw avg beat from ECG
+  //values
   float bpmECG = 60000.0 / rrECG;
-	dtostrf(bpmECG,2,2,buff);
-	u8g2.drawStr(79, 20, buff);
+  float bpmPPG = 60000.0 / rrPPG;
+  int dHR = abs((int)bpmECG - (int)bpmPPG);
 
-  //draw R-R interval from ECG
-  dtostrf(rrECG,2,1,buff);
-	u8g2.drawStr(23, 20, buff);
 
-	u8g2.drawBox(104, 11, 23, 14); //ECG do not determin SpO2;
+  //ECG ROW
+  dtostrf(rrECG, 4, 0, buff);
+  u8g2.drawStr(23, 20, buff);
 
+  dtostrf(bpmECG, 4, 0, buff);
+  u8g2.drawStr(46, 20, buff);
+
+  //MAX ROW
+  dtostrf(rrPPG, 4, 0, buff);
+  u8g2.drawStr(23, 35, buff);
+
+  dtostrf(bpmPPG, 4, 0, buff);
+  u8g2.drawStr(74, 35, buff);
+
+  //draw dHR
+  sprintf(buff, "%d", dHR);
+  u8g2.drawStr(104, 27, buff);
+
+  //visual feedback
+  if (dHR > 10) {
+    u8g2.drawFrame(102, 15, 24, 20);  // warning box
+  }
+  
+  //ACT: interpretation
 	bool tachy = beatAvg > 100;
 	bool brady = beatAvg < 50;
-	bool unstable = abs(beatsPerMinute - beatAvg) > 15;
 	bool noSignal = irValue < IR_THRESHOLD;
+
+  if (noSignal){
+    u8g2.drawStr(20, 55, "NO_SIGNAL");
+  }else if (dHR > 15){
+    u8g2.drawStr(20, 55, "UNSTABLE");
+  }else{
+    u8g2.drawStr(20, 55, "NORMAL");
+  }
+
+  if (brady){
+    u8g2.drawFrame(67, 47, 56, 11);
+    u8g2.drawStr(69, 55, "BRADYCARDIA");
+  }
+
+  if (tachy) {
+    u8g2.drawFrame(67, 47, 54, 11);
+    u8g2.drawStr(69, 55, "TACHYCARDIA");
+  }
 }
 
 void getVitals(){
