@@ -10,7 +10,12 @@
 
 ## ✨ What's GALBI?
 Galbi is a *DIY Home Monitor* capable of visualizing **heart rate waveform** and giving feedbacks about it.
-
+<p align="center">
+  <img
+    src="img/20260104_150830.jpg"
+    alt="layout"
+  />
+</p>
 ## 🎨 Features
 - ✅ HR Waveform on LCD
 
